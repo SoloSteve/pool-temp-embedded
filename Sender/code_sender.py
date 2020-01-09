@@ -1,5 +1,5 @@
 import board
-from system_lib import Sensor, Communicator
+from python.pool_temp.system_lib import Sensor, Communicator
 import time
 from digitalio import DigitalInOut, Direction
 from board import D13, RFM9X_CS, RFM9X_RST
