@@ -3,7 +3,7 @@ import json
 import sys
 
 import board
-from python.pool_temp.system_lib import Communicator
+from pool_temp.system_lib import Communicator
 
 
 class Receiver(object):
