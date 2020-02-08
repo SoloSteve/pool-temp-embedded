@@ -33,26 +33,29 @@ class Receiver(object):
     def __init__(self, timeout=None, recurring=False, always_listening=False):
         self.recurring = recurring
         self.communicator = Communicator(cs=board.CE1, rst=board.D25)
-        self.timeout = timeout or 10
+        self.recv_timeout = timeout or 10
+        self.wait_timeout = timeout or 15
         self.cached = {}
-        self.stack = MaxStack(60)  # 15 minute history
-        self.growth_interval = 15
+        self.stack = MaxStack(60)  # 60 minute history
+        self.growth_interval = 60
 
         if always_listening:
             self.constant_update()
 
     def get_raw(self):
-        data = self.communicator.recv_packed(self.timeout)
+        data = self.communicator.recv_packed(self.recv_timeout)
         self.cached = data if data else self.cached
         return data
 
     def get_growth(self, stack):
         try:
-            avg = statistics.mean([(stack[i + 1] - stack[i]) for i in range(len(stack) - 1)])
-            avg_hour = avg * 60 * 60 / self.growth_interval
-            return round(avg_hour, 3)
+            stack = self.stack.get()
+            avg1 = statistics.mean(stack[0:len(stack) - 1])
+            avg2 = statistics.mean(stack[1:len(stack)])
+            avg_hour = (avg2 - avg1) * 60
+            return round(avg_hour, 4)
         except statistics.StatisticsError:
-            return -1
+            return 0
 
     def get_dict(self):
         data = self.get_raw()
@@ -65,7 +68,8 @@ class Receiver(object):
             }
             data["growth"] = {
                 "sample_size": len(self.stack.get()),
-                "value": self.get_growth(self.stack.get())
+                "value": self.get_growth(self.stack.get()),
+                "stack": self.stack.get()
             }
         return data
 
@@ -77,6 +81,7 @@ class Receiver(object):
             yield self.get_dict()
             return
         while True:
+            time.sleep(self.wait_timeout)
             res = self.get_dict()
             if res:
                 yield res
@@ -89,14 +94,15 @@ class Receiver(object):
                         _self.cached = result
                 except Exception as e:
                     print(e)
+                time.sleep(1)
 
         def growth_update(_self):
             while True:
                 try:
                     _self.stack.push(_self.cached["sensors"]["40:170:188:49:64:20:1:156"])
-                    time.sleep(_self.growth_interval)
                 except Exception as e:
                     print(e)
+                time.sleep(_self.growth_interval)
 
         threading.Thread(target=update_cache, args=(self,)).start()
         threading.Thread(target=growth_update, args=(self,)).start()
@@ -121,10 +127,6 @@ def main():
             return response.json(r.get_dict())
 
         app.run(host="0.0.0.0", port=8000, debug=False, access_log=False)
-
-        import time
-        while True:
-            time.sleep(2)
     else:
         for message in r.yield_data():
             if message:
